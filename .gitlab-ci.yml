@@ -1,2 +1,97 @@
-# GitLab CI pipeline for Crossplane
-# TODO: Add build configuration
+default:
+  tags: ["arch:amd64"]
+  image: registry.ddbuild.io/images/nydus:v2.3.7
+
+variables:
+  # Base images
+  DISTROLESS_ROOT_FIPS_BASE_IMAGE: registry.ddbuild.io/images/base/gbi-distroless-nossl-root-fips:release
+
+# Force git to remove any reference to the local disk copy of the repository
+before_script:
+  - git repack -a -d && rm -f .git/objects/info/alternates
+
+.build-crossplane:
+  stage: build
+  rules:
+    # Run build for tag pushes only
+    - if: $CI_COMMIT_TAG
+  id_tokens:
+    DDSIGN_ID_TOKEN:
+      aud: image-integrity
+  script: |
+    set -euxo pipefail
+
+    # Build configuration
+    REGISTRY="registry.ddbuild.io"
+    IMAGE_NAME="crossplane"
+    VERSION="$CI_COMMIT_TAG"
+    PLATFORMS="linux/amd64,linux/arm64"
+
+    echo "Building ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+    echo "Platforms: ${PLATFORMS}"
+
+    # Create buildx builder if it doesn't exist
+    docker buildx create --name crossplane-builder --use 2>/dev/null || docker buildx use crossplane-builder
+
+    # Create Dockerfile inline
+    cat > Dockerfile << 'EOF'
+    FROM golang:1.24.5-alpine AS builder
+
+    WORKDIR /crossplane
+    COPY go.mod go.sum ./
+    RUN go mod download
+
+    COPY . .
+    ARG VERSION=v0.0.0-dev
+    ENV GOFIPS140=v1.0.0
+    RUN CGO_ENABLED=0 GOOS=linux go build \
+      -ldflags="-s -w -X=github.com/crossplane/crossplane/v2/internal/version.version=${VERSION}" \
+      -o crossplane ./cmd/crossplane
+
+    FROM registry.ddbuild.io/images/base/gbi-distroless-nossl-root-fips:release
+    COPY --from=builder /crossplane/crossplane /usr/local/bin/
+    COPY cluster/crds/ /crds
+    COPY cluster/webhookconfigurations/ /webhookconfigurations
+    EXPOSE 8080
+    USER 65532
+    ENTRYPOINT ["crossplane"]
+    EOF
+
+    # Build and push multi-platform image
+    METADATA_FILE=$(mktemp)
+    docker buildx build \
+      --platform ${PLATFORMS} \
+      --build-arg VERSION=${VERSION} \
+      --label is_fips=true \
+      --label version=${VERSION} \
+      --label target=release \
+      --label CI_PIPELINE_ID="$CI_PIPELINE_ID" \
+      --label CI_JOB_ID="$CI_JOB_ID" \
+      --tag ${REGISTRY}/${IMAGE_NAME}:${VERSION} \
+      --tag ${REGISTRY}/${IMAGE_NAME}:latest \
+      --metadata-file "${METADATA_FILE}" \
+      --output type=image,push=true,compression=zstd,force-compression=true,oci-mediatypes=true \
+      .
+
+    # Show build metadata
+    echo "Build metadata:"
+    cat "${METADATA_FILE}"
+
+    # Sign the image (if ddsign is available)
+    if command -v ddsign &> /dev/null; then
+      ddsign sign "${REGISTRY}/${IMAGE_NAME}:${VERSION}" --docker-metadata-file "${METADATA_FILE}"
+    fi
+
+    # Convert to Nydus format (if available)
+    if command -v nydus-convert &> /dev/null; then
+      nydus-convert "${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+    fi
+
+    # Cleanup
+    rm -f "${METADATA_FILE}"
+    rm -f Dockerfile
+
+    echo "Successfully built and pushed ${REGISTRY}/${IMAGE_NAME}:${VERSION}"
+
+crossplane:
+  extends: .build-crossplane
