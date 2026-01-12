@@ -69,18 +69,23 @@ func (c *initCommand) Run(s *runtime.Scheme, log logging.Logger) error {
 
 	var steps []initializer.Step
 
-	tlsGeneratorOpts := []initializer.TLSCertificateGeneratorOption{
-		initializer.TLSCertificateGeneratorWithClientSecretName(c.TLSClientSecretName, []string{fmt.Sprintf("%s.%s", c.ServiceAccount, c.Namespace)}),
-		initializer.TLSCertificateGeneratorWithLogger(log.WithValues("Step", "TLSCertificateGenerator")),
-	}
-	if c.EnableWebhooks {
-		tlsGeneratorOpts = append(tlsGeneratorOpts,
-			initializer.TLSCertificateGeneratorWithServerSecretName(c.TLSServerSecretName, initializer.DNSNamesForService(c.WebhookServiceName, c.WebhookServiceNamespace)))
-	}
+	// Only run TLS certificate generation if at least one TLS secret name is configured
+	if c.TLSCASecretName != "" || c.TLSServerSecretName != "" || c.TLSClientSecretName != "" {
+		tlsGeneratorOpts := []initializer.TLSCertificateGeneratorOption{
+			initializer.TLSCertificateGeneratorWithClientSecretName(c.TLSClientSecretName, []string{fmt.Sprintf("%s.%s", c.ServiceAccount, c.Namespace)}),
+			initializer.TLSCertificateGeneratorWithLogger(log.WithValues("Step", "TLSCertificateGenerator")),
+		}
+		if c.EnableWebhooks {
+			tlsGeneratorOpts = append(tlsGeneratorOpts,
+				initializer.TLSCertificateGeneratorWithServerSecretName(c.TLSServerSecretName, initializer.DNSNamesForService(c.WebhookServiceName, c.WebhookServiceNamespace)))
+		}
 
-	steps = append(steps,
-		initializer.NewTLSCertificateGenerator(c.Namespace, c.TLSCASecretName, tlsGeneratorOpts...),
-	)
+		steps = append(steps,
+			initializer.NewTLSCertificateGenerator(c.Namespace, c.TLSCASecretName, tlsGeneratorOpts...),
+		)
+	} else {
+		log.Info("Skipping TLS certificate generation - no TLS secret names configured")
+	}
 
 	if c.EnableWebhooks {
 		// Crossplane used to serve these webhooks, but now uses CEL validation.
