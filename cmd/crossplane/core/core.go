@@ -92,11 +92,12 @@ func (c *Command) Run() error {
 type startCommand struct {
 	Profile string `help:"Serve runtime profiling data via HTTP at /debug/pprof." placeholder:"host:port"`
 
-	Namespace      string `default:"crossplane-system"     env:"POD_NAMESPACE"                                                      help:"Namespace used to unpack and run packages."                      short:"n"`
-	ServiceAccount string `default:"crossplane"            env:"POD_SERVICE_ACCOUNT"                                                help:"Name of the Crossplane Service Account."`
-	LeaderElection bool   `default:"false"                 env:"LEADER_ELECTION"                                                    help:"Use leader election for the controller manager."                 short:"l"`
-	CABundlePath   string `env:"CA_BUNDLE_PATH"            help:"Additional CA bundle to use when fetching packages from registry."`
-	UserAgent      string `default:"${default_user_agent}" env:"USER_AGENT"                                                         help:"The User-Agent header that will be set on all package requests."`
+	Namespace               string `default:"crossplane-system"     env:"POD_NAMESPACE"                                                      help:"Namespace used to unpack and run packages."                      short:"n"`
+	ServiceAccount          string `default:"crossplane"            env:"POD_SERVICE_ACCOUNT"                                                help:"Name of the Crossplane Service Account."`
+	LeaderElection          bool   `default:"false"                 env:"LEADER_ELECTION"                                                    help:"Use leader election for the controller manager."                 short:"l"`
+	CABundlePath            string `env:"CA_BUNDLE_PATH"            help:"Additional CA bundle to use when fetching packages from registry."`
+	UserAgent               string `default:"${default_user_agent}" env:"USER_AGENT"                                                         help:"The User-Agent header that will be set on all package requests."`
+	RegistryAuthCloudNative bool   `default:"false"                 env:"REGISTRY_AUTH_CLOUD_NATIVE"                                         help:"Use cloud-native authentication (IMDS/workload identity) for registry access instead of Kubernetes ImagePullSecrets. Enables GCR/AR, ACR, ECR authentication via node/workload-identity."`
 
 	XpkgCacheDir string `aliases:"cache-dir" default:"/cache/xpkg" env:"XPKG_CACHE_DIR,CACHE_DIR" help:"Directory used for caching package images." short:"c"`
 
@@ -499,12 +500,18 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 	log.Info("Package Runtime for Provider: " + string(pr.For(pkgv1.ProviderKind)))
 	log.Info("Package Runtime for Function: " + string(pr.For(pkgv1.FunctionKind)))
 
+	fetcherOpts := []xpkg.FetcherOpt{xpkg.WithUserAgent(c.UserAgent)}
+	if c.RegistryAuthCloudNative {
+		fetcherOpts = append(fetcherOpts, xpkg.WithCloudNativeAuth(true))
+		log.Info("Using cloud-native authentication for registry access (IMDS/workload identity)")
+	}
+
 	po := pkgcontroller.Options{
 		Options:                          o,
 		Cache:                            xpkg.NewFsPackageCache(c.XpkgCacheDir, afero.NewOsFs()),
 		Namespace:                        c.Namespace,
 		ServiceAccount:                   c.ServiceAccount,
-		FetcherOptions:                   []xpkg.FetcherOpt{xpkg.WithUserAgent(c.UserAgent)},
+		FetcherOptions:                   fetcherOpts,
 		PackageRuntime:                   pr,
 		MaxConcurrentPackageEstablishers: c.MaxConcurrentPackageEstablishers,
 	}

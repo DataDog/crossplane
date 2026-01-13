@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/authn/k8schain"
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -52,11 +53,12 @@ type Fetcher interface {
 
 // K8sFetcher uses kubernetes credentials to fetch package images.
 type K8sFetcher struct {
-	client         kubernetes.Interface
-	namespace      string
-	serviceAccount string
-	transport      http.RoundTripper
-	userAgent      string
+	client             kubernetes.Interface
+	namespace          string
+	serviceAccount     string
+	transport          http.RoundTripper
+	userAgent          string
+	useCloudNativeAuth bool
 }
 
 // FetcherOpt can be used to add optional parameters to NewK8sFetcher.
@@ -107,6 +109,17 @@ func WithServiceAccount(sa string) FetcherOpt {
 	}
 }
 
+// WithCloudNativeAuth is a FetcherOpt that enables cloud-native authentication
+// (via IMDS/workload identity) without requiring Kubernetes API access to pull
+// secrets. This uses k8schain.NewNoClient which provides GCR/AR, ACR, and ECR
+// authentication via node/workload-identity style auth.
+func WithCloudNativeAuth(enabled bool) FetcherOpt {
+	return func(k *K8sFetcher) error {
+		k.useCloudNativeAuth = enabled
+		return nil
+	}
+}
+
 // NewK8sFetcher creates a new K8sFetcher.
 func NewK8sFetcher(client kubernetes.Interface, opts ...FetcherOpt) (*K8sFetcher, error) {
 	dt, ok := remote.DefaultTransport.(*http.Transport)
@@ -128,13 +141,24 @@ func NewK8sFetcher(client kubernetes.Interface, opts ...FetcherOpt) (*K8sFetcher
 	return k, nil
 }
 
-// Fetch fetches a package image.
-func (i *K8sFetcher) Fetch(ctx context.Context, ref name.Reference, secrets ...string) (v1.Image, error) {
-	auth, err := k8schain.New(ctx, i.client, k8schain.Options{
+// keychain returns the appropriate keychain based on the fetcher configuration.
+// If useCloudNativeAuth is enabled, it uses k8schain.NewNoClient for cloud-native
+// authentication (GCR/AR, ACR, ECR via IMDS/workload identity).
+// Otherwise, it uses k8schain.New which reads ImagePullSecrets from Kubernetes.
+func (i *K8sFetcher) keychain(ctx context.Context, secrets ...string) (authn.Keychain, error) {
+	if i.useCloudNativeAuth {
+		return k8schain.NewNoClient(ctx)
+	}
+	return k8schain.New(ctx, i.client, k8schain.Options{
 		Namespace:          i.namespace,
 		ServiceAccountName: i.serviceAccount,
 		ImagePullSecrets:   secrets,
 	})
+}
+
+// Fetch fetches a package image.
+func (i *K8sFetcher) Fetch(ctx context.Context, ref name.Reference, secrets ...string) (v1.Image, error) {
+	auth, err := i.keychain(ctx, secrets...)
 	if err != nil {
 		return nil, err
 	}
@@ -149,11 +173,7 @@ func (i *K8sFetcher) Fetch(ctx context.Context, ref name.Reference, secrets ...s
 
 // Head fetches a package descriptor.
 func (i *K8sFetcher) Head(ctx context.Context, ref name.Reference, secrets ...string) (*v1.Descriptor, error) {
-	auth, err := k8schain.New(ctx, i.client, k8schain.Options{
-		Namespace:          i.namespace,
-		ServiceAccountName: i.serviceAccount,
-		ImagePullSecrets:   secrets,
-	})
+	auth, err := i.keychain(ctx, secrets...)
 	if err != nil {
 		return nil, err
 	}
@@ -183,11 +203,7 @@ func (i *K8sFetcher) Head(ctx context.Context, ref name.Reference, secrets ...st
 
 // Tags fetches a package's tags.
 func (i *K8sFetcher) Tags(ctx context.Context, ref name.Reference, secrets ...string) ([]string, error) {
-	auth, err := k8schain.New(ctx, i.client, k8schain.Options{
-		Namespace:          i.namespace,
-		ServiceAccountName: i.serviceAccount,
-		ImagePullSecrets:   secrets,
-	})
+	auth, err := i.keychain(ctx, secrets...)
 	if err != nil {
 		return nil, err
 	}
