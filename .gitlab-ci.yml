@@ -45,35 +45,10 @@ before_script:
       -ldflags="-s -w -X=github.com/crossplane/crossplane/v2/internal/version.version=${VERSION}" \
       -o crossplane ./cmd/crossplane
 
-    # Download ECR credential helper for cloud-native ECR authentication
-    # TARGETOS and TARGETARCH are automatically set by buildx for multi-platform builds
-    ARG TARGETOS
-    ARG TARGETARCH
-    ARG ECR_HELPER_VERSION=0.11.0
-    RUN set -ex && \
-      OS="${TARGETOS:-linux}" && \
-      ARCH="${TARGETARCH:-amd64}" && \
-      wget -q -O /usr/local/bin/docker-credential-ecr-login \
-        "https://amazon-ecr-credential-helper-releases.s3.us-east-2.amazonaws.com/${ECR_HELPER_VERSION}/${OS}-${ARCH}/docker-credential-ecr-login" && \
-      chmod +x /usr/local/bin/docker-credential-ecr-login
-
-    # Create docker config that uses the ECR credential helper for specific ECR registries
-    RUN mkdir -p /home/nonroot/.docker && \
-      cat > /home/nonroot/.docker/config.json << 'DOCKERCFG'
-    {
-      "credHelpers": {
-        "727006795293.dkr.ecr.us-east-1.amazonaws.com": "ecr-login"
-      }
-    }
-    DOCKERCFG
-
     FROM registry.ddbuild.io/images/base/gbi-distroless-nossl-root-fips:release
     COPY --from=builder /crossplane/crossplane /usr/local/bin/
-    COPY --from=builder /usr/local/bin/docker-credential-ecr-login /usr/local/bin/
-    COPY --from=builder /home/nonroot/.docker/config.json /home/nonroot/.docker/config.json
     COPY cluster/crds/ /crds
     COPY cluster/webhookconfigurations/ /webhookconfigurations
-    ENV DOCKER_CONFIG=/home/nonroot/.docker
     EXPOSE 8080
     USER 65532
     ENTRYPOINT ["crossplane"]
