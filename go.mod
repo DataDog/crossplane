@@ -40,7 +40,7 @@ require (
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
 	sigs.k8s.io/controller-runtime v0.22.2
 	sigs.k8s.io/e2e-framework v0.6.0
-	sigs.k8s.io/kind v0.30.0
+	sigs.k8s.io/kind v0.31.0
 	sigs.k8s.io/yaml v1.6.0
 )
 
