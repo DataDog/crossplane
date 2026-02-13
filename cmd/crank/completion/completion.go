@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/posener/complete"
+	"github.com/posener/complete/v2"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
