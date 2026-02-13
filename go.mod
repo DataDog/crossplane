@@ -26,7 +26,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/afero v1.12.0
 	github.com/willabides/kongplete v0.4.0
-	golang.org/x/sync v0.18.0
+	golang.org/x/sync v0.19.0
 	google.golang.org/grpc v1.72.1
 	google.golang.org/protobuf v1.36.11
 	k8s.io/api v0.34.1
