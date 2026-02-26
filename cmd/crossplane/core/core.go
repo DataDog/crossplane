@@ -20,6 +20,7 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"os"
@@ -122,6 +123,8 @@ type startCommand struct {
 	TLSServerCertsDir   string `env:"TLS_SERVER_CERTS_DIR"   help:"The path of the folder which will store TLS server certificate of Crossplane."`
 	TLSClientSecretName string `env:"TLS_CLIENT_SECRET_NAME" help:"The name of the TLS Secret that will be store Crossplane's client certificate."`
 	TLSClientCertsDir   string `env:"TLS_CLIENT_CERTS_DIR"   help:"The path of the folder which will store TLS client certificate of Crossplane."`
+
+	TLSFunctionServerCAPath string `env:"TLS_FUNCTION_SERVER_CA_PATH" help:"Path to CA certificate used to verify function server TLS certificates."`
 
 	TLSClientCACertFileName string `default:"ca.crt"  env:"TLS_CLIENT_CA_CERT_FILENAME"   help:"The filename of the CA certificate in the TLS client certs directory."`
 	TLSClientCertFileName   string `default:"tls.crt" env:"TLS_CLIENT_CERT_FILENAME"      help:"The filename of the client certificate in the TLS client certs directory."`
@@ -269,6 +272,18 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		false)
 	if err != nil {
 		return errors.Wrap(err, "cannot load client TLS certificates")
+	}
+
+	if c.TLSFunctionServerCAPath != "" {
+		ca, err := os.ReadFile(c.TLSFunctionServerCAPath)
+		if err != nil {
+			return errors.Wrap(err, "cannot read function server CA certificate")
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(ca) {
+			return errors.New("cannot parse function server CA certificate")
+		}
+		clienttls.RootCAs = pool
 	}
 
 	pfrm := xfn.NewPrometheusMetrics()
