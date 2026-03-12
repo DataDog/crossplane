@@ -56,7 +56,7 @@ type initCommand struct {
 	TLSClientSecretName     string `env:"TLS_CLIENT_SECRET_NAME"    help:"The name of the Secret that the initializer will fill with TLS client certificates."`
 
 	WebhookTLSCertDir string `env:"WEBHOOK_TLS_CERT_DIR"  help:"Directory containing TLS certificates for webhooks. When set, certificates are read from files instead of Secrets."`
-	WebhookTLSCACert  string `default:"ca.crt"            env:"WEBHOOK_TLS_CA_CERT" help:"Filename of the CA certificate within the TLS cert directory."`
+	WebhookTLSCACert  string `env:"WEBHOOK_TLS_CA_CERT" help:"Filename of the CA certificate within the TLS cert directory."`
 }
 
 // Run starts the initialization process.
@@ -69,6 +69,10 @@ func (c *initCommand) Run(s *runtime.Scheme, log logging.Logger) error {
 	cl, err := client.New(cfg, client.Options{Scheme: s})
 	if err != nil {
 		return errors.Wrap(err, "cannot create new kubernetes client")
+	}
+
+	if c.WebhookTLSCACert == "" {
+		c.WebhookTLSCACert = initializer.SecretKeyCACert
 	}
 
 	var steps []initializer.Step

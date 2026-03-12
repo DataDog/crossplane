@@ -61,6 +61,7 @@ import (
 	"github.com/crossplane/crossplane/v2/internal/controller/protection"
 	"github.com/crossplane/crossplane/v2/internal/engine"
 	"github.com/crossplane/crossplane/v2/internal/features"
+	"github.com/crossplane/crossplane/v2/internal/initializer"
 	"github.com/crossplane/crossplane/v2/internal/metrics"
 	"github.com/crossplane/crossplane/v2/internal/protection/usage"
 	"github.com/crossplane/crossplane/v2/internal/transport"
@@ -122,12 +123,12 @@ type startCommand struct {
 	TLSClientSecretName string `env:"TLS_CLIENT_SECRET_NAME" help:"The name of the TLS Secret that will be store Crossplane's client certificate."`
 	TLSClientCertsDir   string `env:"TLS_CLIENT_CERTS_DIR"   help:"The path of the folder which will store TLS client certificate of Crossplane."`
 
-	TLSClientCACertFileName string `default:"ca.crt"  env:"TLS_CLIENT_CA_CERT_FILENAME"   help:"The filename of the CA certificate in the TLS client certs directory."`
-	TLSClientCertFileName   string `default:"tls.crt" env:"TLS_CLIENT_CERT_FILENAME"      help:"The filename of the client certificate in the TLS client certs directory."`
-	TLSClientKeyFileName    string `default:"tls.key" env:"TLS_CLIENT_KEY_FILENAME"       help:"The filename of the client private key in the TLS client certs directory."`
+	TLSClientCACertFileName string `env:"TLS_CLIENT_CA_CERT_FILENAME" help:"The filename of the CA certificate in the TLS client certs directory."`
+	TLSClientCertFileName   string `env:"TLS_CLIENT_CERT_FILENAME"   help:"The filename of the client certificate in the TLS client certs directory."`
+	TLSClientKeyFileName    string `env:"TLS_CLIENT_KEY_FILENAME"    help:"The filename of the client private key in the TLS client certs directory."`
 
-	TLSServerCertFileName string `default:"tls.crt" env:"TLS_SERVER_CERT_FILENAME"      help:"The filename of the client certificate in the TLS client certs directory."`
-	TLSServerKeyFileName  string `default:"tls.key" env:"TLS_SERVER_KEY_FILENAME"       help:"The filename of the client private key in the TLS client certs directory."`
+	TLSServerCertFileName string `env:"TLS_SERVER_CERT_FILENAME" help:"The filename of the server certificate in the TLS server certs directory."`
+	TLSServerKeyFileName  string `env:"TLS_SERVER_KEY_FILENAME"  help:"The filename of the server private key in the TLS server certs directory."`
 
 	EnableDependencyVersionUpgrades   bool `group:"Alpha Features:" help:"Enable support for upgrading dependency versions when the parent package is updated."`
 	EnableDependencyVersionDowngrades bool `group:"Alpha Features:" help:"Enable support for upgrading and downgrading dependency versions when a dependent package is updated."`
@@ -157,6 +158,22 @@ type startCommand struct {
 
 // Run core Crossplane controllers.
 func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //nolint:gocognit // Only slightly over.
+	if c.TLSClientCACertFileName == "" {
+		c.TLSClientCACertFileName = initializer.SecretKeyCACert
+	}
+	if c.TLSClientCertFileName == "" {
+		c.TLSClientCertFileName = corev1.TLSCertKey
+	}
+	if c.TLSClientKeyFileName == "" {
+		c.TLSClientKeyFileName = corev1.TLSPrivateKeyKey
+	}
+	if c.TLSServerCertFileName == "" {
+		c.TLSServerCertFileName = corev1.TLSCertKey
+	}
+	if c.TLSServerKeyFileName == "" {
+		c.TLSServerKeyFileName = corev1.TLSPrivateKeyKey
+	}
+
 	if c.EnableCompositionWebhookSchemaValidation {
 		//nolint:revive // This is long and easier to read with punctuation.
 		return errors.New("Crossplane now uses CEL to validate Compositions. The --enable-composition-webhook-schema-validation flag will be removed in a future release.")
