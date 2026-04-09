@@ -20,6 +20,7 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"os"
@@ -40,6 +41,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -305,6 +307,32 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		false)
 	if err != nil {
 		return errors.Wrap(err, "cannot load client TLS certificates")
+	}
+
+	clientCertWatcher, err := certwatcher.New(
+		filepath.Join(c.TLSClientCertsDir, c.TLSClientCertFileName),
+		filepath.Join(c.TLSClientCertsDir, c.TLSClientKeyFileName),
+	)
+	if err != nil {
+		return errors.Wrap(err, "cannot create client certificate watcher")
+	}
+	clienttls.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		return clientCertWatcher.GetCertificate(nil)
+	}
+	caPath := filepath.Join(c.TLSClientCertsDir, c.TLSClientCACertFileName)
+	clientCertWatcher.RegisterCallback(func(_ tls.Certificate) {
+		ca, err := os.ReadFile(filepath.Clean(caPath))
+		if err != nil {
+			log.Debug("Cannot reload CA certificate", "error", err)
+			return
+		}
+		pool := x509.NewCertPool()
+		if pool.AppendCertsFromPEM(ca) {
+			clienttls.RootCAs = pool
+		}
+	})
+	if err := mgr.Add(clientCertWatcher); err != nil {
+		return errors.Wrap(err, "cannot add client certificate watcher to manager")
 	}
 
 	pfrm := xfn.NewPrometheusMetrics()
