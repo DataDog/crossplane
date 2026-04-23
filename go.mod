@@ -21,7 +21,7 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/google/go-containerregistry v0.20.7
 	github.com/pkg/errors v0.9.1
-	github.com/posener/complete v1.2.3
+	github.com/posener/complete/v2 v2.1.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/afero v1.15.0
 	github.com/willabides/kongplete v0.4.0
@@ -47,6 +47,8 @@ require (
 	github.com/google/go-containerregistry/pkg/authn/k8schain v0.0.0-20230919002926-dbcd01c402b2 // indirect
 	github.com/in-toto/in-toto-golang v0.10.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
+	github.com/posener/complete v1.2.3 // indirect
+	github.com/posener/script v1.2.0 // indirect
 	github.com/sigstore/cosign/v3 v3.0.5 // indirect
 	github.com/sigstore/sigstore v1.10.5 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
