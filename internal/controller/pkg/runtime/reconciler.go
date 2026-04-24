@@ -220,7 +220,7 @@ func SetupFunctionRevision(mgr ctrl.Manager, o controller.Options) error {
 		WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name), o.EventFilterFunctions...)), //nolint:staticcheck // TODO(adamwg) Update crossplane-runtime to the new events API.
 		WithNamespace(o.Namespace),
 		WithServiceAccount(o.ServiceAccount),
-		WithRuntimeHooks(NewFunctionHooks(mgr.GetClient())),
+		WithRuntimeHooks(NewFunctionHooks(mgr.GetClient(), o.FunctionEndpointSuffix)),
 		WithFeatureFlags(o.Features),
 		WithConfigStore(xpkg.NewImageConfigStore(mgr.GetClient(), o.Namespace)),
 	)
