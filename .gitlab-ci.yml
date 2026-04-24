@@ -32,7 +32,7 @@ before_script:
 
     # Create Dockerfile inline
     cat > Dockerfile << 'EOF'
-    FROM golang:1.24.5-alpine AS builder
+    FROM golang:1.25.9-alpine AS builder
 
     WORKDIR /crossplane
     COPY go.mod go.sum ./
