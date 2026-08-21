@@ -20,10 +20,12 @@ package core
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
 
 	"github.com/alecthomas/kong"
@@ -40,6 +42,7 @@ import (
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -305,6 +308,68 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		false)
 	if err != nil {
 		return errors.Wrap(err, "cannot load client TLS certificates")
+	}
+
+	clientCertWatcher, err := certwatcher.New(
+		filepath.Join(c.TLSClientCertsDir, c.TLSClientCertFileName),
+		filepath.Join(c.TLSClientCertsDir, c.TLSClientKeyFileName),
+	)
+	if err != nil {
+		return errors.Wrap(err, "cannot create client certificate watcher")
+	}
+	clienttls.GetClientCertificate = func(_ *tls.CertificateRequestInfo) (*tls.Certificate, error) {
+		return clientCertWatcher.GetCertificate(nil)
+	}
+
+	caPath := filepath.Join(c.TLSClientCertsDir, c.TLSClientCACertFileName)
+
+	var clientRootCAs atomic.Pointer[x509.CertPool]
+
+	loadClientRootCAs := func() error {
+		ca, err := os.ReadFile(filepath.Clean(caPath))
+		if err != nil {
+			return err
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(ca) {
+			return errors.New("no valid certificates found in CA bundle")
+		}
+		clientRootCAs.Store(pool)
+		return nil
+	}
+	if err := loadClientRootCAs(); err != nil {
+		return errors.Wrap(err, "cannot load client CA certificate")
+	}
+
+	// grpc's credentials.NewTLS clones this *tls.Config once when the function
+	// runner is constructed below, so mutating clienttls.RootCAs afterwards has
+	// no effect on future handshakes. Verify manually instead, reading the CA
+	// pool from clientRootCAs on every connection, so CA rotation actually
+	// takes effect.
+	clienttls.InsecureSkipVerify = true
+	clienttls.VerifyConnection = func(cs tls.ConnectionState) error {
+		if len(cs.PeerCertificates) == 0 {
+			return errors.New("no peer certificates presented")
+		}
+		opts := x509.VerifyOptions{
+			DNSName:       cs.ServerName,
+			Roots:         clientRootCAs.Load(),
+			Intermediates: x509.NewCertPool(),
+		}
+		for _, cert := range cs.PeerCertificates[1:] {
+			opts.Intermediates.AddCert(cert)
+		}
+		_, err := cs.PeerCertificates[0].Verify(opts)
+		return err
+	}
+
+	clientCertWatcher.RegisterCallback(func(_ tls.Certificate) {
+		if err := loadClientRootCAs(); err != nil {
+			log.Info("Cannot reload client CA certificate, keeping previous CA pool", "path", caPath, "error", err)
+		}
+	})
+	if err := mgr.Add(clientCertWatcher); err != nil {
+		return errors.Wrap(err, "cannot add client certificate watcher to manager")
 	}
 
 	pfrm := xfn.NewPrometheusMetrics()
