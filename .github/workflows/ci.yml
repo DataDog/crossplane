@@ -55,7 +55,7 @@ jobs:
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Lint
-        run: nix build .#checks.x86_64-linux.go-lint .#checks.x86_64-linux.helm-lint --print-build-logs
+        run: nix build .#checks.x86_64-linux.go-lint .#checks.x86_64-linux.helm-lint .#checks.x86_64-linux.helm-chart-version --print-build-logs
 
   codeql:
     runs-on: ubuntu-24.04
@@ -180,7 +180,14 @@ jobs:
           timeout_minutes: 45
           max_attempts: 3
           command: |
+            e2e_args=()
+            # This fixture's credentials cannot pull from the upstream private GCP
+            # registry in DataDog CI. Keep all other pkg coverage and upstream behavior.
+            if [[ "$GITHUB_REPOSITORY" == "DataDog/crossplane" ]]; then
+              e2e_args+=('-skip-features=^TestConfigurationPullFromPrivateRegistry$')
+            fi
             nix run .#e2e -- \
+              "${e2e_args[@]}" \
               -test.failfast \
               -fail-fast \
               -prior-crossplane-version=${CROSSPLANE_PRIOR_VERSION} \

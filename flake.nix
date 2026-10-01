@@ -133,6 +133,7 @@
           generate = checks.generate { inherit version; };
           go-lint = checks.goLint { inherit version; };
           helm-lint = checks.helmLint { };
+          helm-chart-version = checks.helmChartVersion { };
           shell-lint = checks.shellLint { };
           nix-lint = checks.nixLint { };
         }

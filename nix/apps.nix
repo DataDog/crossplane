@@ -199,7 +199,7 @@
       version,
     }:
     let
-      chartVersion = builtins.substring 1 (-1) version;
+      chartVersion = pkgs.lib.removePrefix "v" version;
     in
     {
       type = "app";

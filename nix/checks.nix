@@ -83,6 +83,38 @@
         touch $out/.lint-passed
       '';
 
+  # Package both standalone and release charts with prefixed and unprefixed versions.
+  helmChartVersion =
+    _:
+    let
+      build = import ./build.nix { inherit pkgs self; };
+      versions = [
+        "2.2.0"
+        "0.0.1-dev.test12.4.g5ae0aa763"
+      ];
+      checkVersion =
+        expected: version:
+        let
+          chart = build.chart { inherit version; };
+          release = build.release {
+            inherit version;
+            goPlatforms = [ ];
+            imagePlatforms = [ ];
+          };
+        in
+        ''
+          for chart in ${chart}/crossplane-${expected}.tgz ${release}/charts/crossplane-${expected}.tgz; do
+            helm show chart "$chart" > metadata.yaml
+            grep -Fx 'version: ${expected}' metadata.yaml
+            grep -Fx 'appVersion: ${expected}' metadata.yaml
+          done
+        '';
+    in
+    pkgs.runCommand "crossplane-helm-chart-version" { nativeBuildInputs = [ pkgs.kubernetes-helm ]; } ''
+      ${pkgs.lib.concatMapStrings (v: checkVersion v v + checkVersion v "v${v}") versions}
+      mkdir -p $out
+    '';
+
   # Verify generated code matches committed code
   generate =
     { version }:

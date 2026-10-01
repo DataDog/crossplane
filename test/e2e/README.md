@@ -43,6 +43,16 @@ test binary. Use `--` to pass flags to the test binary. For example:
 ./nix.sh run .#e2e -- -test.v -test-suite=composition-webhook-schema-validation
 ```
 
+### DataDog Fork CI
+
+In `DataDog/crossplane` CI only, the workflow skips
+`TestConfigurationPullFromPrivateRegistry` using an exact `-skip-features`
+filter. Its checked-in pull-secret fixture cannot download artifacts from the
+upstream private GCP registry. This is not evidence of a missing GitHub secret.
+All other package tests and matrix variants still run. Upstream CI and local
+runs are unchanged; the private-registry test and production registry
+authentication remain intact.
+
 ### Accessing the Test Cluster
 
 E2E tests run directly on your host machine. The test creates a `kind` cluster

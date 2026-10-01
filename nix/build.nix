@@ -181,7 +181,7 @@ in
   chart =
     { version }:
     let
-      chartVersion = builtins.substring 1 (-1) version;
+      chartVersion = pkgs.lib.removePrefix "v" version;
     in
     pkgs.runCommand "crossplane-helm-chart-${chartVersion}"
       { nativeBuildInputs = [ pkgs.kubernetes-helm ]; }
@@ -245,7 +245,7 @@ in
       imagePlatforms,
     }:
     let
-      chartVersion = builtins.substring 1 (-1) version;
+      chartVersion = pkgs.lib.removePrefix "v" version;
 
       crossplaneBins = builtins.listToAttrs (
         map (p: {
