@@ -180,14 +180,7 @@ jobs:
           timeout_minutes: 45
           max_attempts: 3
           command: |
-            e2e_args=()
-            # This fixture's credentials cannot pull from the upstream private GCP
-            # registry in DataDog CI. Keep all other pkg coverage and upstream behavior.
-            if [[ "$GITHUB_REPOSITORY" == "DataDog/crossplane" ]]; then
-              e2e_args+=('-skip-features=^TestConfigurationPullFromPrivateRegistry$')
-            fi
             nix run .#e2e -- \
-              "${e2e_args[@]}" \
               -test.failfast \
               -fail-fast \
               -prior-crossplane-version=${CROSSPLANE_PRIOR_VERSION} \
