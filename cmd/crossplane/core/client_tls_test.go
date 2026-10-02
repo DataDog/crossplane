@@ -39,7 +39,7 @@ import (
 )
 
 // This catches stale client certificates and CA pools in the TLS config cloned
-// by gRPC before Emissary atomically replaces the certificates-directory symlink.
+// by gRPC before an atomic replacement of the certificates-directory symlink.
 func TestLoadClientTLSConfigRotation(t *testing.T) {
 	oldCA := newTestCA(t, "old")
 	newCA := newTestCA(t, "new")
@@ -66,8 +66,8 @@ func TestLoadClientTLSConfigRotation(t *testing.T) {
 		t.Fatal("trusted the new CA before rotation")
 	}
 
-	// Rename the replacement symlink over the existing one, just as Emissary
-	// publishes a complete new bundle rather than updating files in place.
+	// Rename the replacement symlink over the existing one to publish a
+	// complete new bundle rather than updating files in place.
 	next := filepath.Join(dir, "next")
 	if err := os.Symlink(newDir, next); err != nil {
 		t.Fatal(err)
