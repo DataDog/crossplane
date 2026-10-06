@@ -45,7 +45,6 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	"github.com/crossplane/crossplane-runtime/v2/pkg/certificates"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/controller"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/v2/pkg/event"
@@ -298,13 +297,16 @@ func (c *startCommand) Run(s *runtime.Scheme, log logging.Logger) error { //noli
 		EventFilterFunctions:    eventFilterFns,
 	}
 
-	clienttls, err := certificates.LoadMTLSConfig(
+	clienttls, clientCertWatcher, err := loadClientTLSConfig(
 		filepath.Join(c.TLSClientCertsDir, c.TLSClientCACertFileName),
 		filepath.Join(c.TLSClientCertsDir, c.TLSClientCertFileName),
 		filepath.Join(c.TLSClientCertsDir, c.TLSClientKeyFileName),
-		false)
+		log)
 	if err != nil {
-		return errors.Wrap(err, "cannot load client TLS certificates")
+		return err
+	}
+	if err := mgr.Add(clientCertWatcher); err != nil {
+		return errors.Wrap(err, "cannot add client certificate watcher to manager")
 	}
 
 	pfrm := xfn.NewPrometheusMetrics()
